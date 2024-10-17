@@ -1,2 +1,2 @@
 # zweb
-HTML5 CSS3 ES6 Jade React Semantic-UI
+Vue 3.X Tailwindcss 3.X

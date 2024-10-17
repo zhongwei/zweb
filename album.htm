@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Document</title>
+  <script src="asset/vue.js"></script>
+  <script src="asset/tailwindcss.js"></script>
+  <link rel="stylesheet" href="asset/font-awesome.css" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* 样式代码 */
+  </style>
+</head>
+<body class="bg-gray-900 text-green-500 p-1">
+  <div class="container mx-auto max-w-7xl">
+    <div
+      id="app"
+      class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2 gap-1"
+    >
+      <image-card
+        v-for="num in numbers"
+        :key="num"
+        :num="num"
+        :t="t"
+        :a="a"
+        :bitmap="clickedBitmap"
+        @save="saveToLocalStorage"
+      ></image-card>
+    </div>
+  </div>
+  <script src="base64Utils.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

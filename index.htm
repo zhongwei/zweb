@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script src="asset/tailwindcss.js"></script>
+    <script src="asset/vue.js"></script>
+    <script src="asset/d.js"></script>
+  </head>
+  <body class="bg-gray-900 text-green-500 p-1">
+    <div class="container mx-auto max-w-7xl">
+      <div id="app">
+        <albums></albums>
+        <!-- Albums 组件 -->
+      </div>
+    </div>
+
+    <script>
+      const { ref } = Vue; // 引用 Vue 的组合式 API
+
+      // 创建 AlbumItem 组件
+      const AlbumItem = {
+        props: {
+          record: {
+            type: Array,
+            required: true,
+          },
+        },
+        computed: {
+          albumLink() {
+            return `album.htm?a=${this.record[0]}&c=${this.record[1]}`;
+          },
+          imageSrc() {
+            return `res/${this.record[0]}/1`;
+          },
+        },
+        template: `
+          <div class="relative overflow-hidden rounded-lg shadow-md">
+            <a :href="albumLink" target="_blank">
+              <img
+                :src="imageSrc"
+                alt="Image"
+                class="w-full h-auto transition-transform duration-500 hover:scale-105"
+              />
+            </a>
+          </div>
+        `,
+      };
+
+      // 创建 Albums 组件
+      const Albums = {
+        components: { AlbumItem }, // 注册 AlbumItem 子组件
+        setup() {
+          const records = ref(d); // 响应式数据
+
+          return { records };
+        },
+        template: `
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2 gap-1">
+            <album-item
+              v-for="(record, index) in records"
+              :key="index"
+              :record="record"
+            ></album-item>
+          </div>
+        `,
+      };
+
+      // 创建 Vue 应用并挂载组件
+      const app = Vue.createApp({});
+      app.component("albums", Albums);
+      app.mount("#app");
+    </script>
+  </body>
+</html>
