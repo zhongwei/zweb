@@ -107,6 +107,11 @@ fn main() -> Result<()> {
                                     if result.is_ok() {
                                         let controller = controller.unwrap();
 
+                                        let mut rect = RECT::default();
+                                        let _ = GetClientRect(hwnd, &mut rect);
+                                        let _ = controller.SetBounds(rect);
+                                        let _ = controller.SetIsVisible(true);
+
                                         let webview = controller.CoreWebView2()?;
 
                                         webview.Navigate(w!(
