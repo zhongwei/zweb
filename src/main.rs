@@ -1,35 +1,49 @@
-use std::cell::UnsafeCell;
+use std::borrow::Cow;
+use std::fs;
+use std::path::{Path, PathBuf};
 
-use windows::{
-    core::*,
-    Win32::{
-        Foundation::*,
-        Graphics::Dwm::*,
-        System::{
-            Com::*,
-            LibraryLoader::*,
-            Registry::*,
-        },
-        UI::WindowsAndMessaging::*,
-    },
+use tao::{
+    dpi::LogicalSize,
+    event::{Event, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
+    window::WindowBuilder,
 };
+use wry::{http::Response, WebViewBuilder};
 
-use webview2_com::{
-    Microsoft::Web::WebView2::Win32::*,
-    CreateCoreWebView2EnvironmentCompletedHandler,
-    CreateCoreWebView2ControllerCompletedHandler,
-};
+#[cfg(target_os = "windows")]
+use tao::platform::windows::WindowExtWindows;
 
-struct SyncCell<T>(UnsafeCell<T>);
-unsafe impl<T> Sync for SyncCell<T> {}
+fn static_dir() -> PathBuf {
+    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/static"))
+}
 
-static CONTROLLER: SyncCell<Option<ICoreWebView2Controller>> = SyncCell(UnsafeCell::new(None));
+fn mime_type(path: &Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()).unwrap_or("") {
+        "htm" | "html" => "text/html",
+        "js" => "application/javascript",
+        "css" => "text/css",
+        "json" => "application/json",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "svg" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        "ttf" => "font/ttf",
+        "eot" => "application/vnd.ms-fontobject",
+        _ => "application/octet-stream",
+    }
+}
 
+#[cfg(target_os = "windows")]
 fn is_dark_mode() -> bool {
+    use windows::core::w;
+    use windows::Win32::System::Registry::*;
+
     unsafe {
         let mut value: u32 = 0;
         let mut size = std::mem::size_of::<u32>() as u32;
-
         let result = RegGetValueW(
             HKEY_CURRENT_USER,
             w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
@@ -39,16 +53,19 @@ fn is_dark_mode() -> bool {
             Some(&mut value as *mut _ as *mut _),
             Some(&mut size),
         );
-
         result.is_ok() && value == 0
     }
 }
 
-fn apply_theme(hwnd: HWND) {
+#[cfg(target_os = "windows")]
+fn apply_dark_titlebar(hwnd: isize) {
+    use windows::Win32::Foundation::*;
+    use windows::Win32::Graphics::Dwm::*;
+
     unsafe {
         let dark = is_dark_mode() as i32;
         let _ = DwmSetWindowAttribute(
-            hwnd,
+            HWND(hwnd as *mut _),
             DWMWA_USE_IMMERSIVE_DARK_MODE,
             &dark as *const _ as *const _,
             std::mem::size_of::<i32>() as u32,
@@ -56,124 +73,65 @@ fn apply_theme(hwnd: HWND) {
     }
 }
 
-fn main() -> Result<()> {
-    unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+fn main() {
+    let event_loop = EventLoop::new();
+    let window = WindowBuilder::new()
+        .with_title("Rust WebView2")
+        .with_inner_size(LogicalSize::new(1280f64, 720f64))
+        .build(&event_loop)
+        .expect("failed to create window");
 
-        let hinstance = GetModuleHandleW(None)?;
+    #[cfg(target_os = "windows")]
+    apply_dark_titlebar(window.hwnd());
 
-        let class_name = w!("WebView2Window");
+    let static_root = static_dir().canonicalize().expect("static dir must exist");
 
-        let wc = WNDCLASSW {
-            lpfnWndProc: Some(wndproc),
-            hInstance: HINSTANCE(hinstance.0),
-            lpszClassName: class_name,
-            hCursor: LoadCursorW(None, IDC_ARROW)?,
-            ..Default::default()
-        };
-
-        RegisterClassW(&wc);
-
-        let hwnd = CreateWindowExW(
-            WINDOW_EX_STYLE::default(),
-            class_name,
-            w!("Rust WebView2"),
-            WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            1280,
-            720,
-            None,
-            None,
-            Some(HINSTANCE(hinstance.0)),
-            None,
-        )?;
-
-        apply_theme(hwnd);
-
-        CreateCoreWebView2EnvironmentWithOptions(
-            PCWSTR::null(),
-            PCWSTR::null(),
-            None,
-            &CreateCoreWebView2EnvironmentCompletedHandler::create(Box::new(
-                move |result, env| {
-                    if result.is_ok() {
-                        let env = env.unwrap();
-
-                        env.CreateCoreWebView2Controller(
-                            hwnd,
-                            &CreateCoreWebView2ControllerCompletedHandler::create(Box::new(
-                                move |result, controller| {
-                                    if result.is_ok() {
-                                        let controller = controller.unwrap();
-
-                                        let mut rect = RECT::default();
-                                        let _ = GetClientRect(hwnd, &mut rect);
-                                        let _ = controller.SetBounds(rect);
-                                        let _ = controller.SetIsVisible(true);
-
-                                        let webview = controller.CoreWebView2()?;
-
-                                        webview.Navigate(w!(
-                                            "https://www.rust-lang.org"
-                                        ))?;
-
-                                        CONTROLLER.0.get().write(Some(controller));
-                                    }
-
-                                    Ok(())
-                                },
-                            )),
-                        )?;
-                    }
-
-                    Ok(())
-                },
-            )),
-        )?;
-
-        let mut msg = MSG::default();
-
-        while GetMessageW(&mut msg, None, 0, 0).into() {
-            let _ = TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-    }
-
-    Ok(())
-}
-
-extern "system" fn wndproc(
-    hwnd: HWND,
-    msg: u32,
-    wparam: WPARAM,
-    lparam: LPARAM,
-) -> LRESULT {
-    unsafe {
-        match msg {
-            WM_SETTINGCHANGE => {
-                apply_theme(hwnd);
-                DefWindowProcW(hwnd, msg, wparam, lparam)
-            }
-
-            WM_SIZE => {
-                if let Some(controller) = &*CONTROLLER.0.get() {
-                    let mut rect = RECT::default();
-
-                    let _ = GetClientRect(hwnd, &mut rect);
-
-                    let _ = controller.SetBounds(rect);
+    let _webview = WebViewBuilder::new()
+        .with_custom_protocol("zweb".into(), move |_webview_id, request| {
+            let path = request.uri().path();
+            let file_path = static_root.join(path.trim_start_matches('/'));
+            let resolved = match file_path.canonicalize() {
+                Ok(p) => p,
+                Err(_) => {
+                    return Response::builder()
+                        .status(404)
+                        .body(format!("Not found: {path}").into_bytes())
+                        .expect("building response")
+                        .map(Cow::Owned);
                 }
-
-                LRESULT(0)
+            };
+            if !resolved.starts_with(&static_root) {
+                return Response::builder()
+                    .status(403)
+                    .body("Forbidden".as_bytes().to_vec())
+                    .expect("building response")
+                    .map(Cow::Owned);
             }
-
-            WM_DESTROY => {
-                PostQuitMessage(0);
-                LRESULT(0)
+            match fs::read(&resolved) {
+                Ok(data) => Response::builder()
+                    .header("Content-Type", mime_type(&resolved))
+                    .body(data)
+                    .expect("building response")
+                    .map(Cow::Owned),
+                Err(_) => Response::builder()
+                    .status(404)
+                    .body(format!("Not found: {path}").into_bytes())
+                    .expect("building response")
+                    .map(Cow::Owned),
             }
+        })
+        .with_url("zweb://localhost/index.htm")
+        .build(&window)
+        .expect("failed to create webview");
 
-            _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
+        if let Event::WindowEvent {
+            event: WindowEvent::CloseRequested,
+            ..
+        } = event
+        {
+            *control_flow = ControlFlow::Exit;
         }
-    }
+    });
 }
