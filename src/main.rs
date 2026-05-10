@@ -4,9 +4,11 @@ use windows::{
     core::*,
     Win32::{
         Foundation::*,
+        Graphics::Dwm::*,
         System::{
             Com::*,
             LibraryLoader::*,
+            Registry::*,
         },
         UI::WindowsAndMessaging::*,
     },
@@ -22,6 +24,37 @@ struct SyncCell<T>(UnsafeCell<T>);
 unsafe impl<T> Sync for SyncCell<T> {}
 
 static CONTROLLER: SyncCell<Option<ICoreWebView2Controller>> = SyncCell(UnsafeCell::new(None));
+
+fn is_dark_mode() -> bool {
+    unsafe {
+        let mut value: u32 = 0;
+        let mut size = std::mem::size_of::<u32>() as u32;
+
+        let result = RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+            w!("AppsUseLightTheme"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some(&mut value as *mut _ as *mut _),
+            Some(&mut size),
+        );
+
+        result.is_ok() && value == 0
+    }
+}
+
+fn apply_theme(hwnd: HWND) {
+    unsafe {
+        let dark = is_dark_mode() as i32;
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            &dark as *const _ as *const _,
+            std::mem::size_of::<i32>() as u32,
+        );
+    }
+}
 
 fn main() -> Result<()> {
     unsafe {
@@ -55,6 +88,8 @@ fn main() -> Result<()> {
             Some(HINSTANCE(hinstance.0)),
             None,
         )?;
+
+        apply_theme(hwnd);
 
         CreateCoreWebView2EnvironmentWithOptions(
             PCWSTR::null(),
@@ -111,6 +146,11 @@ extern "system" fn wndproc(
 ) -> LRESULT {
     unsafe {
         match msg {
+            WM_SETTINGCHANGE => {
+                apply_theme(hwnd);
+                DefWindowProcW(hwnd, msg, wparam, lparam)
+            }
+
             WM_SIZE => {
                 if let Some(controller) = &*CONTROLLER.0.get() {
                     let mut rect = RECT::default();
