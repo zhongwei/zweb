@@ -57,7 +57,7 @@ fn resolve_dir_target(dir: &Path) -> String {
                 eprintln!("error: path contains invalid unicode");
                 std::process::exit(1);
             });
-            return format!("file:///{path_str}");
+            return format!("file:///{}", path_str.replace('\\', "/"));
         }
     }
     eprintln!("error: no index.html or index.htm found in '{}'", dir.display());
