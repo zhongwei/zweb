@@ -109,6 +109,27 @@ function refreshAllHearts(dir, img) {
 
 initLikes();
 
+function randomAlbum() {
+  var likedDirs = {};
+  for (var d in likedMap) {
+    if (likedMap.hasOwnProperty(d)) likedDirs[d] = true;
+  }
+  var candidates = [];
+  for (var i = 0; i < albums.length; i++) {
+    if (!likedDirs[albums[i][0]]) candidates.push(albums[i]);
+  }
+  if (candidates.length === 0) return;
+  var pick = candidates[Math.floor(Math.random() * candidates.length)];
+  var dir = pick[0];
+  if (currentView === 'album' && currentAlbumDir === dir && candidates.length > 1) {
+    var other = candidates.filter(function(a) { return a[0] !== dir; });
+    pick = other[Math.floor(Math.random() * other.length)];
+    dir = pick[0];
+  }
+  currentView = null;
+  location.hash = '#/album/' + dir;
+}
+
 buttons.forEach(function(btn) {
   btn.addEventListener('click', function() {
     buttons.forEach(function(b) { b.classList.remove('active'); });
@@ -116,6 +137,7 @@ buttons.forEach(function(btn) {
     document.documentElement.style.setProperty('--cols', btn.dataset.cols);
   });
 });
+document.getElementById('btnRandom').addEventListener('click', randomAlbum);
 
 function openViewer(src) {
   viewerImage.src = src;
@@ -184,11 +206,19 @@ function hideBreadcrumb() {
   bcCurrent.textContent = '';
 }
 
+function setColBtns(n) {
+  buttons.forEach(function(b) {
+    b.classList.toggle('active', b.dataset.cols === String(n));
+  });
+  document.documentElement.style.setProperty('--cols', n);
+}
+
 function renderHome() {
   currentView = 'home';
   currentAlbumDir = null;
   clearGallery();
   hideBreadcrumb();
+  setColBtns(4);
   albums.forEach(function(album) {
     var dir = album[0];
     var name = album[2];
@@ -235,6 +265,7 @@ function renderAlbum(dir) {
   currentAlbumDir = dir;
   clearGallery();
   showBreadcrumb(dir, name);
+  setColBtns(2);
 
   galleryData = [];
   for (var j = 1; j <= count; j++) {
