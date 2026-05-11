@@ -57,6 +57,7 @@ fn resolve_dir_target(dir: &Path) -> String {
                 eprintln!("error: path contains invalid unicode");
                 std::process::exit(1);
             });
+            let path_str = path_str.trim_start_matches(r"\\?\");
             return format!("file:///{}", path_str.replace('\\', "/"));
         }
     }
