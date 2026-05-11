@@ -13,6 +13,57 @@ use wry::{http::Response, WebViewBuilder};
 #[cfg(target_os = "windows")]
 use tao::platform::windows::WindowExtWindows;
 
+enum Target {
+    Url(String),
+    Dir(PathBuf),
+    Default,
+}
+
+fn parse_args() -> Target {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "-d" {
+            if i + 1 < args.len() {
+                return Target::Dir(PathBuf::from(&args[i + 1]));
+            } else {
+                eprintln!("error: -d requires a directory argument");
+                std::process::exit(1);
+            }
+        }
+        i += 1;
+    }
+    if let Some(arg) = args.iter().find(|a| !a.starts_with('-')) {
+        let url = if arg.starts_with("http://") || arg.starts_with("https://") || arg.starts_with("file://") {
+            arg.clone()
+        } else {
+            format!("https://{arg}")
+        };
+        return Target::Url(url);
+    }
+    Target::Default
+}
+
+fn resolve_dir_target(dir: &Path) -> String {
+    let candidates = ["index.html", "index.htm"];
+    let dir = dir.canonicalize().unwrap_or_else(|e| {
+        eprintln!("error: cannot access directory '{}': {e}", dir.display());
+        std::process::exit(1);
+    });
+    for name in &candidates {
+        let file = dir.join(name);
+        if file.exists() {
+            let path_str = file.to_str().unwrap_or_else(|| {
+                eprintln!("error: path contains invalid unicode");
+                std::process::exit(1);
+            });
+            return format!("file:///{path_str}");
+        }
+    }
+    eprintln!("error: no index.html or index.htm found in '{}'", dir.display());
+    std::process::exit(1);
+}
+
 fn static_dir() -> PathBuf {
     PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/static"))
 }
@@ -120,7 +171,14 @@ fn main() {
                     .map(Cow::Owned),
             }
         })
-        .with_url("zweb://localhost/index.htm")
+        .with_url({
+            let target = parse_args();
+            match target {
+                Target::Default => "https://www.rust-lang.org".to_string(),
+                Target::Url(u) => u,
+                Target::Dir(d) => resolve_dir_target(&d),
+            }
+        })
         .build(&window)
         .expect("failed to create webview");
 
