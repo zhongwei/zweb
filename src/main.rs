@@ -300,6 +300,14 @@ fn run_http_server(server: tiny_http::Server) {
 }
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("svr") {
+        let server = tiny_http::Server::http("127.0.0.1:18832")
+            .expect("failed to start likes API server on port 18832");
+        eprintln!("zweb svr: listening on 127.0.0.1:18832");
+        run_http_server(server);
+        return;
+    }
+
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("Rust WebView2")
