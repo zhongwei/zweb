@@ -132,7 +132,7 @@ static LIKES_DIR: OnceLock<PathBuf> = OnceLock::new();
 fn likes_path() -> PathBuf {
     match LIKES_DIR.get() {
         Some(dir) => dir.join("meta").join("likes.js"),
-        None => PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/g/meta/likes.js")),
+        None => PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/gallery/meta/likes.js")),
     }
 }
 

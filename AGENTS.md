@@ -15,3 +15,4 @@ Single binary, no workspace. The crate name is `zweb`.
 - **windows crate 0.61** — kept only for dark title bar support (`DwmSetWindowAttribute` + registry). Version aligned with wry/tao internals.
 - **Windows-only** — requires WebView2 runtime (present on Windows 11 by default). Architecture supports future Linux/macOS builds.
 - Frontend assets live in `static/` (Vue 3 + Tailwind + FontAwesome), served via custom protocol `zweb://localhost/`. **Ignore the `static/` directory** — it is unrelated to current work and should not be modified.
+- **`gallery/`** — the app's frontend web UI. All UI-related changes should focus on files in this directory. It contains `index.html`, `main.js`, `style.css`, and `meta/` / `res/` subdirectories.
