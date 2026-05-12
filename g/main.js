@@ -109,6 +109,78 @@ function refreshAllHearts(dir, img) {
 
 initLikes();
 
+var starsMap = {};
+function initStars() {
+  starsMap = {};
+  if (typeof stars === 'undefined') return;
+  for (var key in stars) {
+    if (stars.hasOwnProperty(key)) {
+      starsMap[parseInt(key, 10)] = stars[key];
+    }
+  }
+}
+function getStar(dir) {
+  return starsMap[dir] || 0;
+}
+function setStarLocal(dir, count) {
+  if (count >= 1 && count <= 5) {
+    starsMap[dir] = count;
+  } else {
+    delete starsMap[dir];
+  }
+}
+initStars();
+
+function updateStarAppearance(container, count) {
+  var els = container.querySelectorAll('.star');
+  for (var i = 0; i < els.length; i++) {
+    var val = parseInt(els[i].getAttribute('data-value'), 10);
+    if (val <= count) {
+      els[i].classList.add('active');
+    } else {
+      els[i].classList.remove('active');
+    }
+  }
+}
+
+function createStarRating(dir) {
+  var container = document.createElement('div');
+  container.className = 'star-rating';
+  if (getStar(dir) > 0) container.classList.add('has-rating');
+  container.setAttribute('data-dir', dir);
+  for (var i = 1; i <= 5; i++) {
+    var s = document.createElement('span');
+    s.className = 'star';
+    s.setAttribute('data-value', i);
+    s.textContent = '\u2605';
+    container.appendChild(s);
+  }
+  updateStarAppearance(container, getStar(dir));
+  container.addEventListener('mouseover', function(e) {
+    if (e.target.classList.contains('star')) {
+      updateStarAppearance(container, parseInt(e.target.getAttribute('data-value'), 10));
+    }
+  });
+  container.addEventListener('mouseout', function() {
+    updateStarAppearance(container, getStar(dir));
+  });
+  container.addEventListener('click', function(e) {
+    if (e.target.classList.contains('star')) {
+      e.stopPropagation();
+      var val = parseInt(e.target.getAttribute('data-value'), 10);
+      setStarLocal(dir, val);
+      updateStarAppearance(container, val);
+      container.classList.add('has-rating');
+      fetch(API + '/api/star', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dir: dir, star: val })
+      }).catch(function() {});
+    }
+  });
+  return container;
+}
+
 function randomAlbum() {
   var likedDirs = {};
   for (var d in likedMap) {
@@ -243,6 +315,7 @@ function renderHome() {
       tags.appendChild(s);
     });
     card.appendChild(tags);
+    card.appendChild(createStarRating(dir));
     card.addEventListener('click', function() {
       location.hash = '#/album/' + dir;
     });

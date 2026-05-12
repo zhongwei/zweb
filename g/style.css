@@ -224,6 +224,36 @@ body { min-height: 100vh; }
 .viewer-heart svg { width: 44px; height: 44px; flex-shrink: 0; }
 .viewer-heart:hover { background: radial-gradient(circle at 100% 100%, rgba(255,105,135,0.25) 0%, transparent 70%); }
 .viewer-heart:hover svg { transform: scale(1.1); }
+.star-rating {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  display: flex;
+  gap: 1px;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: auto;
+}
+.item:hover .star-rating,
+.star-rating.has-rating {
+  opacity: 1;
+}
+.star {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: color 0.15s, transform 0.15s;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.star.active {
+  color: #ffc107;
+}
+.star:hover {
+  transform: scale(1.2);
+}
+
 @media (max-width: 1200px) { :root { --cols: 3; } }
 @media (max-width: 768px) {
   :root { --cols: 2; }

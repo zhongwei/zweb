@@ -131,34 +131,71 @@ static LIKES_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 fn likes_path() -> PathBuf {
     match LIKES_DIR.get() {
-        Some(dir) => dir.join("g").join("likes.js"),
-        None => PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/g/likes.js")),
+        Some(dir) => dir.join("meta").join("likes.js"),
+        None => PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/g/meta/likes.js")),
     }
+}
+
+fn read_file_raw() -> String {
+    let path = likes_path();
+    fs::read_to_string(&path).unwrap_or_default()
+}
+
+fn parse_var_json(content: &str, var_name: &str) -> Option<String> {
+    let prefix = format!("var {} = ", var_name);
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix(&prefix) {
+            let json = rest.trim_end_matches(';').trim();
+            if !json.is_empty() {
+                return Some(json.to_string());
+            }
+        }
+    }
+    None
 }
 
 fn read_likes() -> Vec<Vec<u32>> {
-    let path = likes_path();
-    let content = match fs::read_to_string(&path) {
-        Ok(c) => c,
-        Err(_) => return Vec::new(),
+    let content = read_file_raw();
+    let json = match parse_var_json(&content, "likes") {
+        Some(j) => j,
+        None => return Vec::new(),
     };
-    let trimmed = content.trim();
-    if !trimmed.starts_with("var likes = ") {
-        return Vec::new();
-    }
-    let json_part = &trimmed["var likes = ".len()..];
-    let json_part = json_part.trim_end_matches(';').trim();
-    match serde_json::from_str::<Vec<Vec<u32>>>(json_part) {
-        Ok(v) => v,
-        Err(_) => Vec::new(),
-    }
+    serde_json::from_str(&json).unwrap_or_default()
+}
+
+fn read_stars() -> BTreeMap<u32, u8> {
+    let content = read_file_raw();
+    let json = match parse_var_json(&content, "stars") {
+        Some(j) => j,
+        None => return BTreeMap::new(),
+    };
+    serde_json::from_str(&json).unwrap_or_default()
+}
+
+fn write_likes_and_stars(likes: &[Vec<u32>], stars: &BTreeMap<u32, u8>) {
+    let likes_json = serde_json::to_string(likes).unwrap_or_else(|_| "[]".to_string());
+    let stars_json = serde_json::to_string(stars).unwrap_or_else(|_| "{}".to_string());
+    let content = format!("var likes = {likes_json};\nvar stars = {stars_json};\n");
+    let path = likes_path();
+    let _ = fs::write(&path, content);
 }
 
 fn write_likes(data: &[Vec<u32>]) {
-    let json = serde_json::to_string(data).unwrap_or_else(|_| "[]".to_string());
-    let content = format!("var likes = {json};\n");
-    let path = likes_path();
-    let _ = fs::write(&path, content);
+    let stars = read_stars();
+    write_likes_and_stars(data, &stars);
+}
+
+fn set_star(dir: u32, star: u8) -> u8 {
+    let likes = read_likes();
+    let mut stars = read_stars();
+    if (1..=5).contains(&star) {
+        stars.insert(dir, star);
+    } else {
+        stars.remove(&dir);
+    }
+    write_likes_and_stars(&likes, &stars);
+    star
 }
 
 fn toggle_like(dir: u32, img: u32) -> bool {
@@ -268,6 +305,86 @@ fn run_http_server(server: tiny_http::Server) {
                 let data = read_likes();
                 let resp_body =
                     serde_json::to_string(&data).unwrap_or_else(|_| "[]".to_string());
+                let resp = tiny_http::Response::from_string(resp_body)
+                    .with_header(tiny_http::Header {
+                        field: "Content-Type".parse().unwrap(),
+                        value: "application/json".parse().unwrap(),
+                    })
+                    .with_header(tiny_http::Header {
+                        field: "Access-Control-Allow-Origin".parse().unwrap(),
+                        value: "*".parse().unwrap(),
+                    });
+                let _ = request.respond(resp);
+            }
+            (&tiny_http::Method::Get, "/api/stars") => {
+                let data = read_stars();
+                let resp_body =
+                    serde_json::to_string(&data).unwrap_or_else(|_| "{}".to_string());
+                let resp = tiny_http::Response::from_string(resp_body)
+                    .with_header(tiny_http::Header {
+                        field: "Content-Type".parse().unwrap(),
+                        value: "application/json".parse().unwrap(),
+                    })
+                    .with_header(tiny_http::Header {
+                        field: "Access-Control-Allow-Origin".parse().unwrap(),
+                        value: "*".parse().unwrap(),
+                    });
+                let _ = request.respond(resp);
+            }
+            (&tiny_http::Method::Post, "/api/star") => {
+                let mut body = String::new();
+                if request.as_reader().read_to_string(&mut body).is_err() {
+                    let resp = tiny_http::Response::from_string("{}")
+                        .with_status_code(400)
+                        .with_header(tiny_http::Header {
+                            field: "Content-Type".parse().unwrap(),
+                            value: "application/json".parse().unwrap(),
+                        });
+                    let _ = request.respond(resp);
+                    continue;
+                }
+                let parsed: std::collections::HashMap<String, u32> =
+                    match serde_json::from_str(&body) {
+                        Ok(p) => p,
+                        Err(_) => {
+                            let resp = tiny_http::Response::from_string("{}")
+                                .with_status_code(400)
+                                .with_header(tiny_http::Header {
+                                    field: "Content-Type".parse().unwrap(),
+                                    value: "application/json".parse().unwrap(),
+                                });
+                            let _ = request.respond(resp);
+                            continue;
+                        }
+                    };
+                let dir = match parsed.get("dir") {
+                    Some(&d) => d,
+                    None => {
+                        let resp = tiny_http::Response::from_string("{}")
+                            .with_status_code(400)
+                            .with_header(tiny_http::Header {
+                                field: "Content-Type".parse().unwrap(),
+                                value: "application/json".parse().unwrap(),
+                            });
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                };
+                let star_val = match parsed.get("star") {
+                    Some(&s) if s >= 1 && s <= 5 => s as u8,
+                    _ => {
+                        let resp = tiny_http::Response::from_string("{}")
+                            .with_status_code(400)
+                            .with_header(tiny_http::Header {
+                                field: "Content-Type".parse().unwrap(),
+                                value: "application/json".parse().unwrap(),
+                            });
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                };
+                let result = set_star(dir, star_val);
+                let resp_body = format!("{{\"star\":{result}}}");
                 let resp = tiny_http::Response::from_string(resp_body)
                     .with_header(tiny_http::Header {
                         field: "Content-Type".parse().unwrap(),
