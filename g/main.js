@@ -326,3 +326,34 @@ function route() {
 
 window.addEventListener('hashchange', route);
 route();
+
+function checkServerStatus() {
+  var dot = document.getElementById('statusDot');
+  var ctrl = new AbortController();
+  var timer = setTimeout(function() { ctrl.abort(); }, 100);
+  fetch(API + '/api/likes', { method: 'GET', signal: ctrl.signal })
+    .then(function(r) {
+      clearTimeout(timer);
+      if (r.ok) {
+        dot.className = 'status-dot online';
+      } else {
+        dot.className = 'status-dot offline';
+        showToast();
+      }
+    })
+    .catch(function() {
+      clearTimeout(timer);
+      dot.className = 'status-dot offline';
+      showToast();
+    });
+}
+
+function showToast() {
+  var toast = document.getElementById('toast');
+  toast.classList.add('show');
+  setTimeout(function() {
+    toast.classList.remove('show');
+  }, 3000);
+}
+
+checkServerStatus();

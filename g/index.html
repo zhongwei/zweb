@@ -18,6 +18,7 @@
       <button class="btn active" data-cols="4">4列</button>
       <button class="btn" data-cols="3">3列</button>
       <button class="btn" data-cols="2">2列</button>
+      <span class="status-dot checking" id="statusDot"></span>
     </div>
   </header>
   <main class="gallery" id="gallery"></main>
@@ -26,8 +27,9 @@
     <button class="viewer-heart" id="viewerHeart" style="display:none"></button>
     <img id="viewerImage" src="" alt="" />
   </div>
-  <script src="data.js"></script>
-  <script src="likes.js"></script>
+  <div class="toast" id="toast"><span class="toast-icon"></span><span class="toast-msg">Server offline</span></div>
+  <script src="meta/data.js"></script>
+  <script src="meta/likes.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

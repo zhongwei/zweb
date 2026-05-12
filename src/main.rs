@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use tao::{
     dpi::LogicalSize,
@@ -126,8 +127,13 @@ fn apply_dark_titlebar(hwnd: isize) {
     }
 }
 
+static LIKES_DIR: OnceLock<PathBuf> = OnceLock::new();
+
 fn likes_path() -> PathBuf {
-    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/g/likes.js"))
+    match LIKES_DIR.get() {
+        Some(dir) => dir.join("g").join("likes.js"),
+        None => PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/g/likes.js")),
+    }
 }
 
 fn read_likes() -> Vec<Vec<u32>> {
@@ -301,9 +307,23 @@ fn run_http_server(server: tiny_http::Server) {
 
 fn main() {
     if std::env::args().nth(1).as_deref() == Some("svr") {
+        let args: Vec<String> = std::env::args().skip(2).collect();
+        let dir = args.iter().position(|a| a == "-d").and_then(|i| args.get(i + 1)).map(|s| PathBuf::from(s));
+        let dir = match dir {
+            Some(d) => d,
+            None => {
+                eprintln!("usage: zweb svr -d <directory>");
+                std::process::exit(1);
+            }
+        };
+        if !dir.is_dir() {
+            eprintln!("error: '{}' is not a directory", dir.display());
+            std::process::exit(1);
+        }
+        LIKES_DIR.set(dir.clone()).unwrap();
         let server = tiny_http::Server::http("127.0.0.1:18832")
             .expect("failed to start likes API server on port 18832");
-        eprintln!("zweb svr: listening on 127.0.0.1:18832");
+        eprintln!("zweb svr: listening on 127.0.0.1:18832 (data: {})", dir.display());
         run_http_server(server);
         return;
     }
