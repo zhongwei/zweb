@@ -210,6 +210,10 @@ buttons.forEach(function(btn) {
   });
 });
 document.getElementById('btnRandom').addEventListener('click', randomAlbum);
+document.getElementById('btnRefresh').addEventListener('click', function() {
+  currentView = null;
+  location.hash = '#/';
+});
 
 function openViewer(src) {
   viewerImage.src = src;
@@ -291,7 +295,27 @@ function renderHome() {
   clearGallery();
   hideBreadcrumb();
   setColBtns(4);
-  albums.forEach(function(album) {
+  document.getElementById('btnRefresh').style.display = '';
+  var excluded = {};
+  for (var d in starsMap) {
+    if (starsMap.hasOwnProperty(d)) excluded[d] = true;
+  }
+  for (var d in likedMap) {
+    if (likedMap.hasOwnProperty(d)) excluded[d] = true;
+  }
+  var candidates = [];
+  for (var i = 0; i < albums.length; i++) {
+    if (!excluded[albums[i][0]]) candidates.push(albums[i]);
+  }
+  for (var i = candidates.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = candidates[i];
+    candidates[i] = candidates[j];
+    candidates[j] = tmp;
+  }
+  var picked = candidates.slice(0, 200);
+
+  picked.forEach(function(album) {
     var dir = album[0];
     var name = album[2];
     var card = document.createElement('div');
