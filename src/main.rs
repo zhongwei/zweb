@@ -190,6 +190,115 @@ fn toggle_like(dir: u32, img: u32) -> bool {
     liked
 }
 
+fn run_http_server(server: tiny_http::Server) {
+    for mut request in server.incoming_requests() {
+        match (request.method(), request.url()) {
+            (&tiny_http::Method::Post, "/api/like") => {
+                let mut body = String::new();
+                if request.as_reader().read_to_string(&mut body).is_err() {
+                    let resp = tiny_http::Response::from_string("{}")
+                        .with_status_code(400)
+                        .with_header(tiny_http::Header {
+                            field: "Content-Type".parse().unwrap(),
+                            value: "application/json".parse().unwrap(),
+                        });
+                    let _ = request.respond(resp);
+                    continue;
+                }
+                let parsed: std::collections::HashMap<String, u32> =
+                    match serde_json::from_str(&body) {
+                        Ok(p) => p,
+                        Err(_) => {
+                            let resp = tiny_http::Response::from_string("{}")
+                                .with_status_code(400)
+                                .with_header(tiny_http::Header {
+                                    field: "Content-Type".parse().unwrap(),
+                                    value: "application/json".parse().unwrap(),
+                                });
+                            let _ = request.respond(resp);
+                            continue;
+                        }
+                    };
+                let dir = match parsed.get("dir") {
+                    Some(&d) => d,
+                    None => {
+                        let resp = tiny_http::Response::from_string("{}")
+                            .with_status_code(400)
+                            .with_header(tiny_http::Header {
+                                field: "Content-Type".parse().unwrap(),
+                                value: "application/json".parse().unwrap(),
+                            });
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                };
+                let img = match parsed.get("img") {
+                    Some(&i) => i,
+                    None => {
+                        let resp = tiny_http::Response::from_string("{}")
+                            .with_status_code(400)
+                            .with_header(tiny_http::Header {
+                                field: "Content-Type".parse().unwrap(),
+                                value: "application/json".parse().unwrap(),
+                            });
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                };
+                let liked = toggle_like(dir, img);
+                let resp_body = format!("{{\"liked\":{liked}}}");
+                let resp = tiny_http::Response::from_string(resp_body)
+                    .with_header(tiny_http::Header {
+                        field: "Content-Type".parse().unwrap(),
+                        value: "application/json".parse().unwrap(),
+                    })
+                    .with_header(tiny_http::Header {
+                        field: "Access-Control-Allow-Origin".parse().unwrap(),
+                        value: "*".parse().unwrap(),
+                    });
+                let _ = request.respond(resp);
+            }
+            (&tiny_http::Method::Get, "/api/likes") => {
+                let data = read_likes();
+                let resp_body =
+                    serde_json::to_string(&data).unwrap_or_else(|_| "[]".to_string());
+                let resp = tiny_http::Response::from_string(resp_body)
+                    .with_header(tiny_http::Header {
+                        field: "Content-Type".parse().unwrap(),
+                        value: "application/json".parse().unwrap(),
+                    })
+                    .with_header(tiny_http::Header {
+                        field: "Access-Control-Allow-Origin".parse().unwrap(),
+                        value: "*".parse().unwrap(),
+                    });
+                let _ = request.respond(resp);
+            }
+            (&tiny_http::Method::Options, _) => {
+                let resp = tiny_http::Response::from_string("")
+                    .with_status_code(204)
+                    .with_header(tiny_http::Header {
+                        field: "Access-Control-Allow-Origin".parse().unwrap(),
+                        value: "*".parse().unwrap(),
+                    })
+                    .with_header(tiny_http::Header {
+                        field: "Access-Control-Allow-Methods".parse().unwrap(),
+                        value: "GET, POST, OPTIONS".parse().unwrap(),
+                    })
+                    .with_header(tiny_http::Header {
+                        field: "Access-Control-Allow-Headers".parse().unwrap(),
+                        value: "Content-Type".parse().unwrap(),
+                    });
+                let _ = request.respond(resp);
+            }
+            _ => {
+                let resp = tiny_http::Response::from_string("not found")
+                    .with_status_code(404);
+                let _ = request.respond(resp);
+            }
+        }
+    }
+}
+
 fn main() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
@@ -251,113 +360,7 @@ fn main() {
     let _likes_server = {
         let server = tiny_http::Server::http("127.0.0.1:18832")
             .expect("failed to start likes API server on port 18832");
-        std::thread::spawn(move || {
-            for mut request in server.incoming_requests() {
-                match (request.method(), request.url()) {
-                    (&tiny_http::Method::Post, "/api/like") => {
-                        let mut body = String::new();
-                        if request.as_reader().read_to_string(&mut body).is_err() {
-                            let resp = tiny_http::Response::from_string("{}")
-                                .with_status_code(400)
-                                .with_header(tiny_http::Header {
-                                    field: "Content-Type".parse().unwrap(),
-                                    value: "application/json".parse().unwrap(),
-                                });
-                            let _ = request.respond(resp);
-                            continue;
-                        }
-                        let parsed: std::collections::HashMap<String, u32> =
-                            match serde_json::from_str(&body) {
-                                Ok(p) => p,
-                                Err(_) => {
-                                    let resp = tiny_http::Response::from_string("{}")
-                                        .with_status_code(400)
-                                        .with_header(tiny_http::Header {
-                                            field: "Content-Type".parse().unwrap(),
-                                            value: "application/json".parse().unwrap(),
-                                        });
-                                    let _ = request.respond(resp);
-                                    continue;
-                                }
-                            };
-                        let dir = match parsed.get("dir") {
-                            Some(&d) => d,
-                            None => {
-                                let resp = tiny_http::Response::from_string("{}")
-                                    .with_status_code(400)
-                                    .with_header(tiny_http::Header {
-                                        field: "Content-Type".parse().unwrap(),
-                                        value: "application/json".parse().unwrap(),
-                                    });
-                                let _ = request.respond(resp);
-                                continue;
-                            }
-                        };
-                        let img = match parsed.get("img") {
-                            Some(&i) => i,
-                            None => {
-                                let resp = tiny_http::Response::from_string("{}")
-                                    .with_status_code(400)
-                                    .with_header(tiny_http::Header {
-                                        field: "Content-Type".parse().unwrap(),
-                                        value: "application/json".parse().unwrap(),
-                                    });
-                                let _ = request.respond(resp);
-                                continue;
-                            }
-                        };
-                        let liked = toggle_like(dir, img);
-                        let resp_body = format!("{{\"liked\":{liked}}}");
-                        let resp = tiny_http::Response::from_string(resp_body)
-                            .with_header(tiny_http::Header {
-                                field: "Content-Type".parse().unwrap(),
-                                value: "application/json".parse().unwrap(),
-                            })
-                            .with_header(tiny_http::Header {
-                                field: "Access-Control-Allow-Origin".parse().unwrap(),
-                                value: "*".parse().unwrap(),
-                            });
-                        let _ = request.respond(resp);
-                    }
-                    (&tiny_http::Method::Get, "/api/likes") => {
-                        let data = read_likes();
-                        let resp_body = serde_json::to_string(&data).unwrap_or_else(|_| "[]".to_string());
-                        let resp = tiny_http::Response::from_string(resp_body)
-                            .with_header(tiny_http::Header {
-                                field: "Content-Type".parse().unwrap(),
-                                value: "application/json".parse().unwrap(),
-                            })
-                            .with_header(tiny_http::Header {
-                                field: "Access-Control-Allow-Origin".parse().unwrap(),
-                                value: "*".parse().unwrap(),
-                            });
-                        let _ = request.respond(resp);
-                    }
-                    (&tiny_http::Method::Options, _) => {
-                        let resp = tiny_http::Response::from_string("")
-                            .with_status_code(204)
-                            .with_header(tiny_http::Header {
-                                field: "Access-Control-Allow-Origin".parse().unwrap(),
-                                value: "*".parse().unwrap(),
-                            })
-                            .with_header(tiny_http::Header {
-                                field: "Access-Control-Allow-Methods".parse().unwrap(),
-                                value: "GET, POST, OPTIONS".parse().unwrap(),
-                            })
-                            .with_header(tiny_http::Header {
-                                field: "Access-Control-Allow-Headers".parse().unwrap(),
-                                value: "Content-Type".parse().unwrap(),
-                            });
-                        let _ = request.respond(resp);
-                    }
-                    _ => {
-                        let resp = tiny_http::Response::from_string("not found")
-                            .with_status_code(404);
-                        let _ = request.respond(resp);
-                    }
-                }
-            }
-        })
+        std::thread::spawn(move || run_http_server(server))
     };
 
     event_loop.run(move |event, _, control_flow| {
